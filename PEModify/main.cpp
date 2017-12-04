@@ -66,6 +66,11 @@ struct PE
 	IMAGE_SECTION_HEADER* sections;
 };
 
+template<class T>
+struct ARRAY
+{
+	T entry[];
+};
 
 
 void print_sections(std::string name)
@@ -88,22 +93,105 @@ void print_sections(std::string name)
 
 }
 
-void asm_code()
+#define MAGIC_CODE_MARKER 0x12345678
+
+__declspec(naked) void callMessageBox()
 {
 	__asm
 	{
-		nop
-		mov ecx, 07419F8B0h
+		push MAGIC_CODE_MARKER
+
+		sub esp, 16
+		mov byte ptr[esp + 0], 'u'
+		mov byte ptr[esp + 1], 's'
+		mov byte ptr[esp + 2], 'e'
+		mov byte ptr[esp + 3], 'r'
+		mov byte ptr[esp + 4], '3'
+		mov byte ptr[esp + 5], '2'
+		mov byte ptr[esp + 6], '.'
+		mov byte ptr[esp + 7], 'd'
+		mov byte ptr[esp + 8], 'l'
+		mov byte ptr[esp + 9], 'l'
+		mov byte ptr[esp + 10], 0
+
+		mov ebx, esp
+
 		push 0
+		push ebx
+		push ebx
 		push 0
-		push 0
-		push 0
+
+		mov ecx, 0x07419F8B0
 		call ecx
-		nop
+
+		add esp, 16
+
+		push MAGIC_CODE_MARKER
 	}
 }
 
-uintptr_t functionAddress(void* funcPointer)
+__declspec(naked) void callLoadLibrary()
+{
+	__asm
+	{
+		push MAGIC_CODE_MARKER
+		
+		sub esp, 16
+		mov byte ptr[esp + 0], 'u'
+		mov byte ptr[esp + 1], 's'
+		mov byte ptr[esp + 2], 'e'
+		mov byte ptr[esp + 3], 'r'
+		mov byte ptr[esp + 4], '3'
+		mov byte ptr[esp + 5], '2'
+		mov byte ptr[esp + 6], '.'
+		mov byte ptr[esp + 7], 'd'
+		mov byte ptr[esp + 8], 'l'
+		mov byte ptr[esp + 9], 'l'
+		mov byte ptr[esp + 10], 0
+
+		mov ebx, esp
+
+		push ebx
+
+		mov ecx, 0x74315980 // call LoadLibrary
+		call ecx
+
+		mov byte ptr[esp + 0], 'M'
+		mov byte ptr[esp + 1], 'e'
+		mov byte ptr[esp + 2], 's'
+		mov byte ptr[esp + 3], 's'
+		mov byte ptr[esp + 4], 'a'
+		mov byte ptr[esp + 5], 'g'
+		mov byte ptr[esp + 6], 'e'
+		mov byte ptr[esp + 7], 'B'
+		mov byte ptr[esp + 8], 'o'
+		mov byte ptr[esp + 9], 'x'
+		mov byte ptr[esp + 10],'A'
+		mov byte ptr[esp + 11], 0
+
+		mov ebx, esp
+		push ebx            // function name
+
+		push eax            // dllHandle from LoadLibrary
+
+		mov ecx, 0x743150B0
+		call ecx			// call GetProcAddress
+
+		push 0
+		push ebx
+		push ebx
+		push 0
+
+		call eax
+
+		add esp, 16
+
+		push MAGIC_CODE_MARKER
+	}
+}
+
+// calculate function physical location when using incremental linking
+uintptr_t functionAddressIncremental(void* funcPointer)
 {
 	char* funcPointerChar = (char*) funcPointer;
 
@@ -114,7 +202,6 @@ uintptr_t functionAddress(void* funcPointer)
 	// and add instruction size
 	return *((uintptr_t*)(funcPointerChar + 1)) + (uintptr_t)funcPointerChar + 5;;
 }
-
 
 void x(std::string name)
 {
@@ -131,23 +218,20 @@ void x(std::string name)
 	auto codeDestinationPhysical = codePhysicalAddress + codeSection->Misc.VirtualSize;
 	auto codeDestinationRVA = codeSection->VirtualAddress + codeSection->Misc.VirtualSize;
 
-	auto codeStart = functionAddress(asm_code);
-	while (*((unsigned char*) codeStart) != 0x90)
+	uintptr_t codeStart = (uintptr_t) &callLoadLibrary;
+
+	while (*((int*) codeStart) != MAGIC_CODE_MARKER)
 		codeStart++;
 
+	codeStart += sizeof(MAGIC_CODE_MARKER);
+
 	auto codeEnd = codeStart + 1;
-	while (*((unsigned char*) codeEnd) != 0x90)
+	while (*((int*) codeEnd) != MAGIC_CODE_MARKER)
 		codeEnd++;
 
+	codeEnd -= 1; // push opcode
+
 	auto codeSize = codeEnd - codeStart;
-
-	// TODO 5 = jmpInstructionLength
-	if ((codeSize + 5) > freeSpace)
-	{
-		printf("error: no space\n");
-	}
-
-	memcpy((void*) codeDestinationPhysical, (void*) codeStart, codeSize);
 
 	char jmpBackInstruction[] = "\xE9\x00\x00\x00\x00";
 	int* jmpBackAddress = (int*)(jmpBackInstruction + 1);
@@ -155,9 +239,15 @@ void x(std::string name)
 	// relative offset to addressOfEntryPoint
 	*jmpBackAddress = pe.nt_header->OptionalHeader.AddressOfEntryPoint - (codeDestinationRVA + codeSize + 5);
 
-	memcpy((void*)(codeDestinationPhysical + codeSize), jmpBackInstruction, 5);
+	if ((codeSize + sizeof(jmpBackInstruction)) > freeSpace)
+	{
+		printf("error: no space\n");
+	}
 
-	codeSection->Misc.VirtualSize += codeSize + 5;
+	memcpy((void*) codeDestinationPhysical, (void*) codeStart, codeSize);
+	memcpy((void*) (codeDestinationPhysical + codeSize), jmpBackInstruction, sizeof(jmpBackInstruction));
+
+	codeSection->Misc.VirtualSize += codeSize + sizeof(jmpBackInstruction);
 	pe.nt_header->OptionalHeader.AddressOfEntryPoint = codeDestinationRVA;
 }
 
@@ -173,6 +263,7 @@ void parse_import(PE *pe)
 		IMAGE_THUNK_DATA thunks[];
 	};
 
+	// XXX ARRAY<IMAGE_IMPORT_DESCRIPTOR>
 	auto import_table = pe->rva_to_type<IMPORT_DESCRIPTOR_ARRAY>(pe->nt_header->OptionalHeader.DataDirectory[1].VirtualAddress);
 
 	int j = 0;
@@ -196,7 +287,7 @@ void parse_import(PE *pe)
 	}
 }
 
-void parse_export(PE* pe)
+void parse_export_in_memory(PE* pe)
 {
 	struct THUNK_DATA_ARRAY
 	{
@@ -256,9 +347,17 @@ HRESULT UnicodeToAnsi(LPCOLESTR pszW, LPSTR* ppszA) {
 	return NOERROR;
 }
 
+PTEB getTeb()
+{
+	__asm
+	{
+		mov eax, fs:18h
+	}
+}
+
 void readPEB()
 {
-	PTEB tebPtr = reinterpret_cast<PTEB>(__readfsdword(reinterpret_cast<DWORD_PTR>(&static_cast<NT_TIB*>(nullptr)->Self)));
+	PTEB tebPtr = getTeb();
 	PPEB pebPtr = tebPtr->ProcessEnvironmentBlock;
 	PPEB_LDR_DATA pebLdr = pebPtr->Ldr;
 
@@ -281,64 +380,7 @@ void readPEB()
 int main()
 {
 
-	//original_return = 0x741476E0;
-	//test();
 
-	
-
-	/*FileMapping mapping("printf-rel.exe");
-	auto base_ptr = mapping.ptr();
-
-	PE pe(base_ptr);
-	parse_import(&pe);*/
-
-	//__asm
-	//{
-	//	push 0
-	//	push 0
-	//		push 0
-	//		push 0
-	//		mov ecx, 07419F8B0h
-	//	call ecx
-	//}
-
-
-	//print_sections("printf-rel.exe");
-
-	//entry_point = (int) &test;
-	//code();
-
-	//asm_code();
-
-
-
-	x("Project1x.exe");
-
-	//parse_import("printf-rel.exe");
-
-	// 0x741476E0
-
-	//PE pe(0x74130000);
-
-	//auto* codeSection = pe.findSection(".text");
-	
-	//parse_export(&pe);
-	
-
-	//printf("%lu\n", pe.nt_header->OptionalHeader.ImageBase);
-
-	//auto *x = pe.findSection(".text");
-
-	//auto baseOfCode = pe.nt_header->OptionalHeader.BaseOfCode;
-
-	//auto codePhysicalAddress = pe.offset_to_physical(x->PointerToRawData);
-	//auto baseOfCodePhysical = pe.rva_to_physical(baseOfCode);
-	//
-	//auto entryPoint = pe.nt_header->OptionalHeader.AddressOfEntryPoint;
-	//auto size = x->SizeOfRawData;
-
-	//asm_code();
-
-	//getchar();
+	x("notepad.exe");
 	
 }
