@@ -7,70 +7,134 @@
 
 #define MAGIC_CODE_MARKER 0x12345678
 
+#define Kernel32DllBaseAddress 0x75710000
+
+#define GetProcAddressOffset 0x000150B0
+#define LoadLibraryOffset 0x00015980
+#define GetModuleHandleAOffset 0x00014FB0
+
+#define GetProcAddressAddress 0x757250B0
+#define LoadLibraryAddress 0x75725980
+#define GetModuleHandleAAddress 0x75724FB0
+
+static_assert(GetProcAddressAddress == GetProcAddressOffset + Kernel32DllBaseAddress,
+	"GetProcAddress");
+static_assert(LoadLibraryAddress == LoadLibraryOffset + Kernel32DllBaseAddress,
+	"LoadLibraryAddress");
+static_assert(GetModuleHandleAAddress == GetModuleHandleAOffset + Kernel32DllBaseAddress,
+	"GetModuleHandleAAddress");
+
 __declspec(naked) void injectionCode()
 {
 	__asm
 	{
 		push MAGIC_CODE_MARKER
-		
-		sub esp, 16
-		mov byte ptr[esp + 0], 'u'
-		mov byte ptr[esp + 1], 's'
-		mov byte ptr[esp + 2], 'e'
-		mov byte ptr[esp + 3], 'r'
-		mov byte ptr[esp + 4], '3'
-		mov byte ptr[esp + 5], '2'
-		mov byte ptr[esp + 6], '.'
-		mov byte ptr[esp + 7], 'd'
-		mov byte ptr[esp + 8], 'l'
-		mov byte ptr[esp + 9], 'l'
-		mov byte ptr[esp + 10], 0
 
-		mov ebx, esp
+		sub esp, 34
+			mov ebp, esp
 
-		push ebx
+			mov byte ptr[ebp + 0], 'u'
+			mov byte ptr[ebp + 1], 's'
+			mov byte ptr[ebp + 2], 'e'
+			mov byte ptr[ebp + 3], 'r'
+			mov byte ptr[ebp + 4], '3'
+			mov byte ptr[ebp + 5], '2'
+			mov byte ptr[ebp + 6], '.'
+			mov byte ptr[ebp + 7], 'd'
+			mov byte ptr[ebp + 8], 'l'
+			mov byte ptr[ebp + 9], 'l'
+			mov byte ptr[ebp + 10], 0
 
-		mov ecx, 0x74315980 // call LoadLibrary
-		call ecx
+			push ebp
+			mov ecx, LoadLibraryAddress // call LoadLibrary
+			call ecx
 
-		mov byte ptr[esp + 0], 'M'
-		mov byte ptr[esp + 1], 'e'
-		mov byte ptr[esp + 2], 's'
-		mov byte ptr[esp + 3], 's'
-		mov byte ptr[esp + 4], 'a'
-		mov byte ptr[esp + 5], 'g'
-		mov byte ptr[esp + 6], 'e'
-		mov byte ptr[esp + 7], 'B'
-		mov byte ptr[esp + 8], 'o'
-		mov byte ptr[esp + 9], 'x'
-		mov byte ptr[esp + 10],'A'
-		mov byte ptr[esp + 11], 0
+			mov dword ptr[ebp + 24], eax // user32.dll handle
 
-		mov ebx, esp
-		push ebx            // function name
+			mov ecx, GetModuleHandleAAddress
+			push 0
+			call ecx			// call GetProcAddress
 
-		push eax            // dllHandle from LoadLibrary
+			mov dword ptr[ebp + 28], eax // GetModuleHandle return value
 
-		mov ecx, 0x743150B0
-		call ecx			// call GetProcAddress
+			mov byte ptr[ebp + 0], 'C'
+			mov byte ptr[ebp + 1], 'r'
+			mov byte ptr[ebp + 2], 'e'
+			mov byte ptr[ebp + 3], 'a'
+			mov byte ptr[ebp + 4], 't'
+			mov byte ptr[ebp + 5], 'e'
+			mov byte ptr[ebp + 6], 'W'
+			mov byte ptr[ebp + 7], 'i'
+			mov byte ptr[ebp + 8], 'n'
+			mov byte ptr[ebp + 9], 'd'
+			mov byte ptr[ebp + 10], 'o'
+			mov byte ptr[ebp + 11], 'w'
+			mov byte ptr[ebp + 12], 'E'
+			mov byte ptr[ebp + 13], 'x'
+			mov byte ptr[ebp + 14], 'A'
+			mov byte ptr[ebp + 15], 0
 
-		push 0
-		push ebx
-		push ebx
-		push 0
+			mov byte ptr[ebp + 17], 'b'
+			mov byte ptr[ebp + 18], 'u'
+			mov byte ptr[ebp + 19], 't'
+			mov byte ptr[ebp + 20], 't'
+			mov byte ptr[ebp + 21], 'o'
+			mov byte ptr[ebp + 22], 'n'
+			mov byte ptr[ebp + 23], 0
 
-		call eax
+			push ebp            // function name
+			push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
+			mov ecx, GetProcAddressAddress
+			call ecx			// call GetProcAddress
 
-		add esp, 16
+			push 0
+			push dword ptr[ebp + 28]
+			push 0
+			push 0
+			push 0x80000000
+			push 0x80000000
+			push 0x80000000
+			push 0x80000000
+			push 0x8160000
+			lea ebx, [ebp + 17]
+			push ebx
+			push ebx
+			push 0
 
-		push MAGIC_CODE_MARKER
+			call eax
+			mov dword ptr[ebp + 32], eax // window handle
+
+			mov byte ptr[ebp + 0], 'S'
+			mov byte ptr[ebp + 1], 'h'
+			mov byte ptr[ebp + 2], 'o'
+			mov byte ptr[ebp + 3], 'w'
+			mov byte ptr[ebp + 4], 'W'
+			mov byte ptr[ebp + 5], 'i'
+			mov byte ptr[ebp + 6], 'n'
+			mov byte ptr[ebp + 7], 'd'
+			mov byte ptr[ebp + 8], 'o'
+			mov byte ptr[ebp + 9], 'w'
+			mov byte ptr[ebp + 10], 0
+
+			push ebp            // function name
+			push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
+			mov ecx, GetProcAddressAddress
+			call ecx			// call GetProcAddress
+
+			push SW_SHOWDEFAULT
+			push dword ptr[ebp + 32]
+			call eax
+
+			add esp, 34
+
+			push MAGIC_CODE_MARKER
 	}
 }
 
 // calculate function physical location when using incremental linking
 uintptr_t functionAddressIncremental(void* funcPointer)
 {
-	char* funcPointerChar = (char*) funcPointer;
+	char* funcPointerChar = (char*)funcPointer;
 
 	// AAA is the real address of a function
 	// [funcPointer] -> jmp AAA ---- E9 AA AA AA AA
@@ -90,15 +154,15 @@ void injectCode(PE& pe, void* injectionCode)
 	auto codeDestinationPhysical = codePhysicalAddress + codeSection->Misc.VirtualSize;
 	auto codeDestinationRVA = codeSection->VirtualAddress + codeSection->Misc.VirtualSize;
 
-	auto codeStart = (uintptr_t) injectionCode;
+	auto codeStart = (uintptr_t)injectionCode;
 
-	while (*((int*) codeStart) != MAGIC_CODE_MARKER)
+	while (*((int*)codeStart) != MAGIC_CODE_MARKER)
 		codeStart++;
 
 	codeStart += sizeof(MAGIC_CODE_MARKER);
 
 	auto codeEnd = codeStart + 1;
-	while (*((int*) codeEnd) != MAGIC_CODE_MARKER)
+	while (*((int*)codeEnd) != MAGIC_CODE_MARKER)
 		codeEnd++;
 
 	codeEnd -= 1; // push instruction size
@@ -110,7 +174,7 @@ void injectCode(PE& pe, void* injectionCode)
 	auto jmpBackInstructionSize = 5;
 
 	// relative offset to addressOfEntryPoint
-	*jmpBackAddress = pe.nt_header->OptionalHeader.AddressOfEntryPoint - 
+	*jmpBackAddress = pe.nt_header->OptionalHeader.AddressOfEntryPoint -
 		(codeDestinationRVA + codeSize + jmpBackInstructionSize);
 
 	if ((codeSize + jmpBackInstructionSize) > freeSpace)
@@ -119,8 +183,8 @@ void injectCode(PE& pe, void* injectionCode)
 		return;
 	}
 
-	memcpy((void*) codeDestinationPhysical, (void*) codeStart, codeSize);
-	memcpy((void*) (codeDestinationPhysical + codeSize), jmpBackInstruction,
+	memcpy((void*)codeDestinationPhysical, (void*)codeStart, codeSize);
+	memcpy((void*)(codeDestinationPhysical + codeSize), jmpBackInstruction,
 		jmpBackInstructionSize);
 
 	codeSection->Misc.VirtualSize += codeSize + jmpBackInstructionSize;
@@ -138,9 +202,11 @@ int main()
 
 	PE pe(base_ptr);
 
-	pe.printImports();
-	pe.printSections();
+	//pe.printImports();
+	//pe.printSections();
 
 	injectCode(pe, &injectionCode);
+
+	getchar();
 	
 }
