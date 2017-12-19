@@ -131,6 +131,64 @@ __declspec(naked) void injectionCode()
 	}
 }
 
+__declspec(naked) void injectionCodeMessageBox()
+{
+	__asm
+	{
+		push MAGIC_CODE_MARKER
+
+		sub esp, 34
+			mov ebp, esp
+
+			mov byte ptr[ebp + 0], 'u'
+			mov byte ptr[ebp + 1], 's'
+			mov byte ptr[ebp + 2], 'e'
+			mov byte ptr[ebp + 3], 'r'
+			mov byte ptr[ebp + 4], '3'
+			mov byte ptr[ebp + 5], '2'
+			mov byte ptr[ebp + 6], '.'
+			mov byte ptr[ebp + 7], 'd'
+			mov byte ptr[ebp + 8], 'l'
+			mov byte ptr[ebp + 9], 'l'
+			mov byte ptr[ebp + 10], 0
+
+			push ebp
+			mov ecx, LoadLibraryAddress // call LoadLibrary
+			call ecx
+
+			mov dword ptr[ebp + 24], eax // user32.dll handle
+
+			mov byte ptr[ebp + 0], 'M'
+			mov byte ptr[ebp + 1], 'e'
+			mov byte ptr[ebp + 2], 's'
+			mov byte ptr[ebp + 3], 's'
+			mov byte ptr[ebp + 4], 'a'
+			mov byte ptr[ebp + 5], 'g'
+			mov byte ptr[ebp + 6], 'e'
+			mov byte ptr[ebp + 7], 'B'
+			mov byte ptr[ebp + 8], 'o'
+			mov byte ptr[ebp + 9], 'x'
+			mov byte ptr[ebp + 10], 'A'
+			mov byte ptr[ebp + 11], 0
+
+			push ebp            // function name
+			push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
+			mov ecx, GetProcAddressAddress
+			call ecx			// call GetProcAddress
+
+			push 0
+			push ebp
+			push ebp
+			push 0
+
+			call eax
+
+			add esp, 34
+
+			push MAGIC_CODE_MARKER
+	}
+}
+
 // calculate function physical location when using incremental linking
 uintptr_t functionAddressIncremental(void* funcPointer)
 {
