@@ -24,110 +24,201 @@ static_assert(LoadLibraryAddress == LoadLibraryOffset + Kernel32DllBaseAddress,
 static_assert(GetModuleHandleAAddress == GetModuleHandleAOffset + Kernel32DllBaseAddress,
 	"GetModuleHandleAAddress");
 
-__declspec(naked) void injectionCode()
+#define dd _asm __emit
+
+#define user32dll dd 'u' dd 's' dd 'e' dd 'r' dd '3' dd '2' dd '.' dd 'd' dd 'l' dd 'l' dd 0
+#define CreateWindowExA dd 'C' dd 'r' dd 'e' dd 'a' dd 't' dd 'e' dd 'W' dd 'i' dd 'n' dd 'd' dd 'o' dd 'w' dd 'E' dd 'x' dd 'A' dd 0
+#define ShowWindow dd 'S' dd 'h' dd 'o' dd 'w' dd 'W' dd 'i' dd 'n' dd 'd' dd 'o' dd 'w' dd 0
+#define windowName dd 'e' dd 'd' dd 'i' dd 't' dd 0
+#define GetMessageA dd 'G' dd 'e' dd 't' dd 'M' dd 'e' dd 's' dd 's' dd 'a' dd 'g' dd 'e' dd 'A' dd 0
+#define DispatchMessageA dd 'D' dd 'i' dd 's' dd 'p' dd 'a' dd 't' dd 'c' dd 'h' dd 'M' dd 'e' dd 's' dd 's' dd 'a' dd 'g' dd 'e' dd 'A' dd 0
+#define TranslateMessage dd 'T' dd 'r' dd 'a' dd 'n' dd 's' dd 'l' dd 'a' dd 't' dd 'e' dd 'M' dd 'e' dd 's' dd 's' dd 'a' dd 'g' dd 'e' dd 0
+
+#define user32dllSize 11
+#define CreateWindowExASize 16
+#define ShowWindowSize 11
+#define windowNameSize 5
+#define GetMessageASize 12
+#define DispatchMessageASize 17
+
+__declspec(naked) void injectionCodeWindow()
 {
 	__asm
 	{
 		push MAGIC_CODE_MARKER
 
-		sub esp, 34
-			mov ebp, esp
+		get_eip:
+		mov eax, [esp]
+		ret
 
-			mov byte ptr[ebp + 0], 'u'
-			mov byte ptr[ebp + 1], 's'
-			mov byte ptr[ebp + 2], 'e'
-			mov byte ptr[ebp + 3], 'r'
-			mov byte ptr[ebp + 4], '3'
-			mov byte ptr[ebp + 5], '2'
-			mov byte ptr[ebp + 6], '.'
-			mov byte ptr[ebp + 7], 'd'
-			mov byte ptr[ebp + 8], 'l'
-			mov byte ptr[ebp + 9], 'l'
-			mov byte ptr[ebp + 10], 0
+		get_data_offset:
+		call get_eip
+		lea eax, [eax + 4]
+		ret
 
-			push ebp
-			mov ecx, LoadLibraryAddress // call LoadLibrary
-			call ecx
+		user32dll
+		CreateWindowExA
+		ShowWindow
+		windowName
+		GetMessageA
+		DispatchMessageA
+		TranslateMessage
 
-			mov dword ptr[ebp + 24], eax // user32.dll handle
+		push MAGIC_CODE_MARKER
 
-			mov ecx, GetModuleHandleAAddress
-			push 0
-			call ecx			// call GetProcAddress
+		push ebp
 
-			mov dword ptr[ebp + 28], eax // GetModuleHandle return value
+		sub esp, 80
+		mov ebp, esp
 
-			mov byte ptr[ebp + 0], 'C'
-			mov byte ptr[ebp + 1], 'r'
-			mov byte ptr[ebp + 2], 'e'
-			mov byte ptr[ebp + 3], 'a'
-			mov byte ptr[ebp + 4], 't'
-			mov byte ptr[ebp + 5], 'e'
-			mov byte ptr[ebp + 6], 'W'
-			mov byte ptr[ebp + 7], 'i'
-			mov byte ptr[ebp + 8], 'n'
-			mov byte ptr[ebp + 9], 'd'
-			mov byte ptr[ebp + 10], 'o'
-			mov byte ptr[ebp + 11], 'w'
-			mov byte ptr[ebp + 12], 'E'
-			mov byte ptr[ebp + 13], 'x'
-			mov byte ptr[ebp + 14], 'A'
-			mov byte ptr[ebp + 15], 0
+		call get_data_offset
+		mov [ebp], eax     // "user32.dll"
+		add eax, user32dllSize
+		mov [ebp + 4], eax // "CreateWindowExA"
+		add eax, CreateWindowExASize
+		mov [ebp + 8], eax // "ShowWindow"
+		add eax, ShowWindowSize
+		mov [ebp + 12], eax // window class name
+		add eax, windowNameSize
+		mov [ebp + 16], eax // "GetMessage"
+		add eax, GetMessageASize
+		mov [ebp + 20], eax // "DispatchMessage"
+		add eax, DispatchMessageASize
+		mov [ebp + 70], eax // "TransalteMessage"
 
-			mov byte ptr[ebp + 17], 'b'
-			mov byte ptr[ebp + 18], 'u'
-			mov byte ptr[ebp + 19], 't'
-			mov byte ptr[ebp + 20], 't'
-			mov byte ptr[ebp + 21], 'o'
-			mov byte ptr[ebp + 22], 'n'
-			mov byte ptr[ebp + 23], 0
+		push dword ptr [ebp]
+		mov ecx, LoadLibraryAddress // call LoadLibrary
+		call ecx
 
-			push ebp            // function name
-			push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
-			mov ecx, GetProcAddressAddress
-			call ecx			// call GetProcAddress
+		mov dword ptr[ebp + 24], eax // user32.dll handle
 
-			push 0
-			push dword ptr[ebp + 28]
-			push 0
-			push 0
-			push 0x80000000
-			push 0x80000000
-			push 0x80000000
-			push 0x80000000
-			push 0x8160000
-			lea ebx, [ebp + 17]
-			push ebx
-			push ebx
-			push 0
+		push 0
+		 mov ecx, GetModuleHandleAAddress
+		 push 0
+		 call ecx			// call GetProcAddress
+		push eax
+		push 0
+		push 0
+		push 0x80000000
+		push 0x80000000
+		push 0x80000000
+		push 0x80000000
+		push 0x8160000
+		push dword ptr [ebp + 12]
+		push dword ptr [ebp + 12]
+		push 0
 
-			call eax
-			mov dword ptr[ebp + 32], eax // window handle
+		push [ebp + 4]            // function name
+		push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
+		mov ecx, GetProcAddressAddress
+		call ecx			// call GetProcAddress
+		call eax
+		mov dword ptr[ebp + 32], eax // window handle
 
-			mov byte ptr[ebp + 0], 'S'
-			mov byte ptr[ebp + 1], 'h'
-			mov byte ptr[ebp + 2], 'o'
-			mov byte ptr[ebp + 3], 'w'
-			mov byte ptr[ebp + 4], 'W'
-			mov byte ptr[ebp + 5], 'i'
-			mov byte ptr[ebp + 6], 'n'
-			mov byte ptr[ebp + 7], 'd'
-			mov byte ptr[ebp + 8], 'o'
-			mov byte ptr[ebp + 9], 'w'
-			mov byte ptr[ebp + 10], 0
+		push [ebp + 8]            // function name
+		push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
+		mov ecx, GetProcAddressAddress
+		call ecx			// call GetProcAddress
 
-			push ebp            // function name
-			push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
-			mov ecx, GetProcAddressAddress
-			call ecx			// call GetProcAddress
+		push SW_SHOWDEFAULT
+		push dword ptr[ebp + 32]
+		call eax
 
-			push SW_SHOWDEFAULT
-			push dword ptr[ebp + 32]
-			call eax
+			get_message:
+		
+		push[ebp + 16]            // function name
+		push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
+		mov ecx, GetProcAddressAddress
+		call ecx
 
-			add esp, 34
+		push 0
+		push 0
+		push 0
+		lea edi, [ebp + 40]
+		push edi
+		call eax
+		
+		cmp eax, 0
+		jz end
 
-			push MAGIC_CODE_MARKER
+		push[ebp + 70]            // function name
+		push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
+		mov ecx, GetProcAddressAddress
+		call ecx
+
+		lea edi, [ebp + 40]
+		push edi
+		call eax
+
+		push[ebp + 20]            // function name
+		push dword ptr[ebp + 24]  // dllHandle from LoadLibrary
+		mov ecx, GetProcAddressAddress
+		call ecx
+
+		lea edi, [ebp + 40]
+		push edi
+		call eax
+
+		jmp get_message
+
+		end:
+		add esp, 80
+
+		pop ebp
+
+		push MAGIC_CODE_MARKER
+	}
+}
+
+#define MessageBoxA dd 'M' dd 'e' dd 's' dd 's' dd 'a' dd 'g' dd 'e' dd 'B' dd 'o' dd 'x' dd 'A' dd 0
+
+__declspec(naked) void injectionCodeMessageBox()
+{
+	__asm
+	{
+		push MAGIC_CODE_MARKER
+
+		get_eip :
+		mov eax, [esp]
+		ret
+
+		get_data_offset :
+		call get_eip
+		lea eax, [eax + 4]
+		ret
+
+		user32dll
+		MessageBoxA
+
+		push MAGIC_CODE_MARKER
+
+		push ebp
+		mov ebp, esp
+
+		call get_data_offset
+		push eax     // "user32.dll"
+		add eax, user32dllSize
+		push eax	 // "MessageBoxA"
+
+		push [ebp - 4]
+		mov ecx, LoadLibraryAddress // call LoadLibrary
+		call ecx
+
+		push [ebp - 8]            // function name
+		push eax  // dllHandle from LoadLibrary
+		mov ecx, GetProcAddressAddress
+		call ecx			// call GetProcAddress
+
+		push 0
+		push[ebp - 8]
+		push[ebp - 8]
+		push 0
+
+		call eax
+
+		pop ebp
+
+		push MAGIC_CODE_MARKER
 	}
 }
 
@@ -161,7 +252,13 @@ void injectCode(PE& pe, void* injectionCode)
 
 	codeStart += sizeof(MAGIC_CODE_MARKER);
 
-	auto codeEnd = codeStart + 1;
+	auto codeEntryPoint = codeStart + 1;
+	while (*((int*)codeEntryPoint) != MAGIC_CODE_MARKER)
+		codeEntryPoint++;
+
+	codeEntryPoint += sizeof(MAGIC_CODE_MARKER);
+
+	auto codeEnd = codeEntryPoint + 1;
 	while (*((int*)codeEnd) != MAGIC_CODE_MARKER)
 		codeEnd++;
 
@@ -188,14 +285,19 @@ void injectCode(PE& pe, void* injectionCode)
 		jmpBackInstructionSize);
 
 	codeSection->Misc.VirtualSize += codeSize + jmpBackInstructionSize;
-	pe.nt_header->OptionalHeader.AddressOfEntryPoint = codeDestinationRVA;
+	pe.nt_header->OptionalHeader.AddressOfEntryPoint = codeDestinationRVA + codeEntryPoint - codeStart;
 }
 
 int main()
 {
 	std::string name;
+	int mode;
 
+	std::cout << "Enter filename\n";
 	std::cin >> name;
+	
+	std::cout << "Enter mode (0 - show Edit window, 1 - show MessageBox)\n";
+	std::cin >> mode;
 
 	FileMapping mapping(name);
 	auto base_ptr = mapping.ptr();
@@ -205,7 +307,10 @@ int main()
 	//pe.printImports();
 	//pe.printSections();
 
-	injectCode(pe, &injectionCode);
+	if (mode == 0)
+		injectCode(pe, &injectionCodeWindow);
+	else
+		injectCode(pe, &injectionCodeMessageBox);
 
 	getchar();
 	
