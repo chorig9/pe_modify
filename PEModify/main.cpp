@@ -353,8 +353,6 @@ uintptr_t findKernel32Address()
 
 		std::string strName(name);
 
-		std::cout << strName << std::endl;
-
 		if (strName.find("KERNEL32.DLL") != std::string::npos)
 			return (uintptr_t) module->DllBase;
 	}
